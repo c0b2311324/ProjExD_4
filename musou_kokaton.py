@@ -4,6 +4,8 @@ import random
 import sys
 import time
 import pygame as pg
+from pygame.math import Vector2
+from math import degrees, atan2
 
 WIDTH = 1100  # Game window width
 HEIGHT = 650  # Game window height
@@ -232,6 +234,53 @@ class Score:
         self.image = self.font.render(f"Score: {self.value}", 0, self.color)
         screen.blit(self.image, self.rect)
 
+class Shield(pg.sprite.Sprite):
+    def __init__(self, bird, life):
+        super().__init__()
+        self.bird = bird
+        self.life = life
+        
+        # こうかとんのサイズを取得して、壁の大きさを設定
+        bird_width, bird_height = self.bird.rect.size
+        shield_width = 20  # 固定幅
+        shield_height = bird_height * 2  # こうかとんの2倍の高さ
+
+        # 防御壁のSurfaceを生成し、青い矩形を描画
+        self.image = pg.Surface((shield_width, shield_height), pg.SRCALPHA)
+        pg.draw.rect(self.image, (0, 0, 255), (0, 0, shield_width, shield_height))
+
+        # 防御壁の初期位置と向きをこうかとんに合わせる
+        self.rect = self.image.get_rect(center = self.bird.rect.center)
+        self.update_position()
+
+    def update_position(self):
+        # こうかとんの向きを取得
+        vx, vy = self.bird.dire
+        angle = degrees(atan2(-vy, vx))
+
+        # 壁を回転させる
+        self.image = pg.transform.rotate(self.image, angle)
+
+        # 回転後の位置をこうかとんの位置に合わせる（こうかとん1体分ずらす）
+        offset = Vector2(vx, vy) * self.bird.rect.width
+        self.rect = self.image.get_rect(center = self.bird.rect.center + offset)
+
+    def update(self):
+        # 防御壁の寿命を減らす
+        self.life -= 1
+        if self.life < 0:
+            self.kill()  # 寿命が尽きたら防御壁を削除
+
+    # def handle_collisions(shields, bombs):
+    # # 防御壁と爆弾の衝突を検出して、爆弾を破壊
+    #     pg.sprite.groupcollide(shields, bombs, False, True)
+
+    # def activate_shield(bird, score, shields):
+    #     if pg.key.get_mods() and pg.K_CAPSLOCK and score >= 20 and len(shields) == 0:
+    #         score -= 20 
+    #         shield = Shield(bird, life=400)  # 400フレームの寿命
+    #         shields.add(shield)  # Shieldをグループに追加
+    #     return score
 
 class EMP(pg.sprite.Sprite):
     """
@@ -329,6 +378,7 @@ def main():
     beams = pg.sprite.Group()
     exps = pg.sprite.Group()
     emys = pg.sprite.Group()
+    shields = pg.sprite.Group()
     emps = pg.sprite.Group()
     gravities = pg.sprite.Group() 
 
@@ -342,10 +392,12 @@ def main():
             if event.type == pg.KEYDOWN:
                 if event.key == pg.K_SPACE:
                     beams.add(Beam(bird))
-                if event.key == pg.K_e:
-                    if score.value >= 20:
-                        score.value -= 20
-                        emps.add(EMP(emys, bombs, screen))
+            if event.type == pg.KEYDOWN and event.key == pg.K_s and score.value >20 and len(shields)==0:
+                shields.add(Shield(bird,life=400))
+            if event.type== pg.KEYDOWN and event.key == pg.K_e:
+                if score.value >= 20:
+                    score.value -= 20
+                    emps.add(EMP(emys, bombs, screen))
             if event.type == pg.KEYDOWN and event.key == pg.K_RETURN:
                 if score.value >= 0:  
                     gravities.add(Gravity(400))  
@@ -381,6 +433,14 @@ def main():
             exps.add(Explosion(bomb, 50))
             score.value += 1
 
+        for bomb in pg.sprite.groupcollide(bombs, shields, True, True).keys():
+            exps.add(Explosion(bomb, 50))  # 爆発エフェクト
+            score.value -= 20  # 20点消費
+
+        for bomb in pg.sprite.groupcollide(bombs, shields, True, True).keys():
+            exps.add(Explosion(bomb, 50))  # 爆発エフェクト
+            score.value -= 20  # 20点消費
+
         # 爆弾とこうかとんの衝突判定
         if bird.state == "normal" and pg.sprite.spritecollideany(bird, bombs):
             bird.change_img(8, screen)  # こうかとん悲しみエフェクト
@@ -396,6 +456,7 @@ def main():
             for bomb in pg.sprite.spritecollide(bird, bombs, True):
                 exps.add(Explosion(bomb, 50))  # 爆発エフェクト
 
+        
         bird.update(key_lst, screen, score)
         beams.update()
         beams.draw(screen)
@@ -408,6 +469,9 @@ def main():
         emps.update()
         emps.draw(screen)
         score.update(screen)
+        shields.update()
+        # Shield.handle_collisions(shields,bombs)
+        shields.draw(screen)
         pg.display.update()
         tmr += 1
         clock.tick(50)

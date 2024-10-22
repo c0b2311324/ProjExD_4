@@ -246,6 +246,60 @@ class EMP(pg.sprite.Sprite):
             self.kill()  # Remove EMP effect
 
 
+class EMP(pg.sprite.Sprite):
+    """
+    Electromagnetic Pulse (EMP) effect class.
+    """
+    def __init__(self, emys: pg.sprite.Group, bombs: pg.sprite.Group, screen: pg.Surface):
+        super().__init__()
+        self.image = pg.Surface((WIDTH, HEIGHT))
+        self.image.fill((255, 255, 0))  # Yellow color
+        self.image.set_alpha(128)  # Set transparency
+        self.rect = self.image.get_rect()
+        self.life = int(0.05 * 50)  # Display for 0.05 seconds at 50 fps
+
+        # Neutralize enemies
+        for emy in emys:
+            if not emy.neutralized:
+                emy.neutralized = True
+                emy.interval = float('inf')
+                emy.image = pg.transform.laplacian(emy.image)
+        
+        # Neutralize bombs
+        for bomb in bombs:
+            if not bomb.neutralized:
+                bomb.neutralized = True
+                bomb.speed *= 0.5
+
+    def update(self):
+        self.life -= 1
+        if self.life <= 0:
+            self.kill()  # Remove EMP effect
+
+
+class Gravity(pg.sprite.Sprite):
+    """
+    重力場に関するクラス
+    """
+    def __init__(self, life: int):
+        """
+        重力場Surfaceを生成する
+        引数 life：発動時間
+        """
+        super().__init__()
+        self.image = pg.Surface((WIDTH, HEIGHT))  # 画面全体のSurface
+        self.image.fill((0, 0, 0))  # 黒で塗りつぶす
+        self.image.set_alpha(128)  # 半透明度
+        self.rect = self.image.get_rect()
+        self.life = life  # 発動時間   
+
+    def update(self):
+        """
+        発動時間を減らし、0未満になったら消す
+        """
+        self.life -= 1
+        if self.life < 0:
+            self.kill()
 def main():
     pg.display.set_caption("真！こうかとん無双")
     screen = pg.display.set_mode((WIDTH, HEIGHT))
@@ -258,6 +312,7 @@ def main():
     exps = pg.sprite.Group()
     emys = pg.sprite.Group()
     emps = pg.sprite.Group()
+    gravities = pg.sprite.Group() 
 
     tmr = 0
     clock = pg.time.Clock()
@@ -273,6 +328,11 @@ def main():
                     if score.value >= 20:
                         score.value -= 20
                         emps.add(EMP(emys, bombs, screen))
+            if event.type == pg.KEYDOWN and event.key == pg.K_RETURN:
+                if score.value >= 0:  
+                    gravities.add(Gravity(400))  
+                    score.value -= 200  
+
         screen.blit(bg_img, [0, 0])
 
         if tmr % 200 == 0:
@@ -282,6 +342,14 @@ def main():
             if emy.state == "stop" and tmr % emy.interval == 0:
                 if not emy.neutralized:
                     bombs.add(Bomb(emy, bird))
+
+        for gravity in gravities:
+            for bomb in pg.sprite.spritecollide(gravity, bombs, True):
+                exps.add(Explosion(bomb, 50))  # 爆発エフェクト
+                score.value += 1
+            for emy in pg.sprite.spritecollide(gravity, emys, True):
+                exps.add(Explosion(emy, 100))  # 爆発エフェクト
+                score.value += 10
 
         for emy in pg.sprite.groupcollide(emys, beams, True, True).keys():
             exps.add(Explosion(emy, 100))
@@ -298,7 +366,8 @@ def main():
             pg.display.update()
             time.sleep(2)
             return
-
+        gravities.update() 
+        gravities.draw(screen) 
         bird.update(key_lst, screen)
         beams.update()
         beams.draw(screen)

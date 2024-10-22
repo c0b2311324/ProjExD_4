@@ -41,6 +41,7 @@ class Bird(pg.sprite.Sprite):
     """
     ゲームキャラクター（こうかとん）に関するクラス
     """
+    
     delta = {  # 押下キーと移動量の辞書
         pg.K_UP: (0, -1),
         pg.K_DOWN: (0, +1),
@@ -72,6 +73,8 @@ class Bird(pg.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.center = xy
         self.speed = 10
+        self.state = "normal"  # 状態変数
+        self.hyper_life = 0  # 無敵時間のカウント
 
     def change_img(self, num: int, screen: pg.Surface):
         """
@@ -82,7 +85,7 @@ class Bird(pg.sprite.Sprite):
         self.image = pg.transform.rotozoom(pg.image.load(f"fig/{num}.png"), 0, 2.0)
         screen.blit(self.image, self.rect)
 
-    def update(self, key_lst: list[bool], screen: pg.Surface):
+    def update(self, key_lst: list[bool], screen: pg.Surface, score):
         """
         押下キーに応じてこうかとんを移動させる
         引数1 key_lst：押下キーの真理値リスト
@@ -101,6 +104,18 @@ class Bird(pg.sprite.Sprite):
             self.image = self.imgs[self.dire]
         screen.blit(self.image, self.rect)
 
+        # 無敵モード発動の判定
+        if key_lst[pg.K_RSHIFT] and score.value >= 100 and self.state == "normal":
+            self.state = "hyper"
+            self.hyper_life = 500
+            score.value -= 100  # スコアを100消費する------------------------------------------------
+
+        # 無敵モードの処理
+        if self.state == "hyper":
+            self.image = pg.transform.laplacian(self.image)  
+            self.hyper_life -= 1
+            if self.hyper_life <= 0:
+                self.state = "normal"  # 無敵モード解除
 
 class Bomb(pg.sprite.Sprite):
     """
@@ -111,7 +126,7 @@ class Bomb(pg.sprite.Sprite):
     def __init__(self, emy: "Enemy", bird: Bird):
         """
         爆弾円Surfaceを生成する
-        引数1 emy：爆弾を投下する敵機
+        引数1 emy:爆弾を投下する敵機
         引数2 bird：攻撃対象のこうかとん
         """
         super().__init__()
@@ -156,7 +171,7 @@ class Beam(pg.sprite.Sprite):
         self.rect.centery = bird.rect.centery+bird.rect.height*self.vy
         self.rect.centerx = bird.rect.centerx+bird.rect.width*self.vx
         self.speed = 10
-
+  
     def update(self):
         """
         ビームを速度ベクトルself.vx, self.vyに基づき移動させる
@@ -243,7 +258,7 @@ class Score:
 
 
 def main():
-    pg.display.set_caption("真！こうかとん無双")
+    pg.display.set_caption("真:こうかとん無双")
     screen = pg.display.set_mode((WIDTH, HEIGHT))
     bg_img = pg.image.load(f"fig/pg_bg.jpg")
     score = Score()
@@ -265,31 +280,36 @@ def main():
                 beams.add(Beam(bird))
         screen.blit(bg_img, [0, 0])
 
-        if tmr%200 == 0:  # 200フレームに1回，敵機を出現させる
+        if tmr % 200 == 0:  # 200フレームに1回，敵機を出現させる
             emys.add(Enemy())
 
         for emy in emys:
-            if emy.state == "stop" and tmr%emy.interval == 0:
+            if emy.state == "stop" and tmr % emy.interval == 0:
                 # 敵機が停止状態に入ったら，intervalに応じて爆弾投下
                 bombs.add(Bomb(emy, bird))
 
         for emy in pg.sprite.groupcollide(emys, beams, True, True).keys():
             exps.add(Explosion(emy, 100))  # 爆発エフェクト
-            score.value += 10  # 10点アップ
+            score.value += 10  # 10点アップ---------------------------------------------------------------------------------
             bird.change_img(6, screen)  # こうかとん喜びエフェクト
 
         for bomb in pg.sprite.groupcollide(bombs, beams, True, True).keys():
             exps.add(Explosion(bomb, 50))  # 爆発エフェクト
             score.value += 1  # 1点アップ
 
-        if len(pg.sprite.spritecollide(bird, bombs, True)) != 0:
-            bird.change_img(8, screen) # こうかとん悲しみエフェクト
+        # 爆弾とこうかとんの衝突判定
+        if bird.state == "normal" and pg.sprite.spritecollideany(bird, bombs):
+            bird.change_img(8, screen)  # こうかとん悲しみエフェクト
             score.update(screen)
             pg.display.update()
             time.sleep(2)
             return
 
-        bird.update(key_lst, screen)
+        if bird.state == "hyper":  # 無敵状態で爆弾に当たった場合
+            for bomb in pg.sprite.spritecollide(bird, bombs, True):
+                exps.add(Explosion(bomb, 50))  # 爆発エフェクト
+
+        bird.update(key_lst, screen, score)
         beams.update()
         beams.draw(screen)
         emys.update()

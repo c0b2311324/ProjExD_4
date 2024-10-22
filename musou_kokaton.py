@@ -144,13 +144,16 @@ class Beam(pg.sprite.Sprite):
     """
     Beam class.
     """
-    def __init__(self, bird: Bird):
+    def __init__(self, bird: Bird, angle0=0):
         """
-        Initialize the beam sprite.
+        ビーム画像Surfaceを生成する
+        引数 bird：ビームを放つこうかとん
+        引数 angle0：ビームの回転角度
         """
         super().__init__()
+        # ビームの方向を指定された角度で調整
         self.vx, self.vy = bird.dire
-        angle = math.degrees(math.atan2(-self.vy, self.vx))
+        angle = math.degrees(math.atan2(-self.vy, self.vx)) + angle0
         self.image = pg.transform.rotozoom(pg.image.load(f"fig/beam.png"), angle, 2.0)
         self.vx = math.cos(math.radians(angle))
         self.vy = -math.sin(math.radians(angle))
@@ -161,11 +164,46 @@ class Beam(pg.sprite.Sprite):
   
     def update(self):
         """
-        Update the beam's position.
+        ビームを速度ベクトルself.vx, self.vyに基づき移動させる
         """
         self.rect.move_ip(self.speed * self.vx, self.speed * self.vy)
         if check_bound(self.rect) != (True, True):
             self.kill()
+
+
+
+    def update(self):
+        """
+        ビームを速度ベクトルself.vx, self.vyに基づき移動させる
+        引数 screen：画面Surface
+        """
+        self.rect.move_ip(self.speed * self.vx, self.speed * self.vy)
+        if check_bound(self.rect) != (True, True):
+            self.kill()
+class NeoBeam:
+    """
+    複数ビームを生成するクラス
+    """
+    def __init__(self, bird: Bird, num: int):
+        """
+        NeoBeamクラスの初期化
+        引数 bird: ビームを放つこうかとん
+        引数 num: 発射するビームの数
+        """
+        self.bird = bird
+        self.num = num
+
+    def gen_beams(self) -> list:
+        """
+        ビームを生成してリストで返す
+        -50°～+50°の範囲で指定ビーム数だけ生成する
+        """
+        beams = []
+        step = 100 // (self.num - 1) if self.num > 1 else 100
+        angles = range(-50, 51, step)  # ビームの角度をステップごとに計算
+        for angle in angles:
+            beams.append(Beam(self.bird, angle))  # 各ビームを生成
+        return beams
 
 class Explosion(pg.sprite.Sprite):
     """
@@ -386,6 +424,7 @@ def main():
     clock = pg.time.Clock()
     while True:
         key_lst = pg.key.get_pressed()
+  
         for event in pg.event.get():
             if event.type == pg.QUIT:
                 return 0
@@ -402,6 +441,15 @@ def main():
                 if score.value >= 0:  
                     gravities.add(Gravity(400))  
                     score.value -= 200  
+            # スペースキーで単発ビーム、Shift+スペースで複数ビームを発射
+            if event.type == pg.KEYDOWN:
+                if event.key == pg.K_SPACE:
+                    if key_lst[pg.K_LSHIFT]:  # 左Shiftキーが押されている場合
+                        print(True)
+                        neobeam = NeoBeam(bird, 5)  # 5方向にビームを発射
+                        beams.add(*neobeam.gen_beams())
+                    else:
+                        beams.add(Beam(bird))
 
         screen.blit(bg_img, [0, 0])
 
@@ -423,7 +471,7 @@ def main():
 
         for emy in pg.sprite.groupcollide(emys, beams, True, True).keys():
             exps.add(Explosion(emy, 100))
-            score.value += 1000
+            score.value += 10
             bird.change_img(6, screen)
                 # 敵機が停止状態に入ったら，intervalに応じて爆弾投下
             bombs.add(Bomb(emy, bird))
@@ -475,7 +523,7 @@ def main():
         pg.display.update()
         tmr += 1
         clock.tick(50)
-
+ 
 
 if __name__ == "__main__":
     pg.init()
